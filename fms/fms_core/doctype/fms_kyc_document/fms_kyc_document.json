@@ -1,0 +1,50 @@
+{
+  "name": "FMS KYC Document",
+  "doctype": "DocType",
+  "module": "FMS Core",
+  "istable": 1,
+  "autoname": "field:document_type",
+  "fields": [
+    {
+      "fieldname": "document_type",
+      "fieldtype": "Select",
+      "label": "Document Type",
+      "options": "\nPAN\nVoter ID\nPassport\nDriving License",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "document_number",
+      "fieldtype": "Data",
+      "label": "Document Number",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "document_file",
+      "fieldtype": "Attach",
+      "label": "Document File",
+      "private": 1
+    },
+    {
+      "fieldname": "verified",
+      "fieldtype": "Check",
+      "label": "Verified"
+    },
+    {
+      "fieldname": "verified_on",
+      "fieldtype": "Datetime",
+      "label": "Verified On"
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}

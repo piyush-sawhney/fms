@@ -1,0 +1,47 @@
+{
+  "name": "FMS Contact Number",
+  "doctype": "DocType",
+  "module": "FMS Core",
+  "istable": 1,
+  "autoname": "field:phone_number",
+  "fields": [
+    {
+      "fieldname": "phone_number",
+      "fieldtype": "Data",
+      "label": "Phone Number",
+      "reqd": 1,
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "type",
+      "fieldtype": "Select",
+      "label": "Type",
+      "options": "\nMobile\nWhatsApp\nLandline\nOffice",
+      "default": "Mobile"
+    },
+    {
+      "fieldname": "is_primary",
+      "fieldtype": "Check",
+      "label": "Primary"
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "\nActive\nInactive",
+      "default": "Active",
+      "in_list_view": 1
+    }
+  ],
+  "permissions": [
+    {
+      "role": "System Manager",
+      "read": 1,
+      "write": 1,
+      "create": 1,
+      "delete": 1
+    }
+  ],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}
