@@ -120,10 +120,10 @@ app_license = "mit"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
+permission_query_conditions = {
+	"FMS Person": "fms.fms_core.doctype.fms_person.fms_person.get_permission_query_conditions",
+}
+
 # has_permission = {
 # 	"Event": "frappe.desk.doctype.event.event.has_permission",
 # }
@@ -249,4 +249,3 @@ app_license = "mit"
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

@@ -1,47 +1,84 @@
 {
-  "actions": [],
-  "autoname": "naming_series:naming_series",
-  "naming_rule": "Series",
-  "creation": "2026-04-09 18:35:14.508354",
-  "doctype": "DocType",
+ "actions": [],
+ "autoname": "naming_series:naming_series",
+ "creation": "2026-04-09 18:35:14.508354",
+ "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "basic_details",
+  "naming_series",
+  "first_name",
+  "middle_name",
+  "last_name",
   "full_name",
-  "pan",
-  "column_break_szeq",
+  "column_break_1",
   "date_of_birth",
-  "column_break_nyre",
   "age",
   "gender",
-  "photo",
+  "status",
+  "column_break_2",
+  "pan_number",
+  "ckyc_number",
+  "display_picture",
+  "primary_contact_section",
+  "primary_mobile",
+  "column_break_ebqm",
+  "primary_whatsapp",
+  "column_break_bnud",
+  "primary_email",
   "contact_section",
-  "contact_numbers",
+  "contact_details",
   "email_section",
   "email_addresses",
   "kyc_section",
-  "kyc_vault",
+  "kyc_documents",
+  "address_section",
+  "address_html",
+  "notes_section",
+  "notes",
   "kyc_status",
   "kyc_verified_on",
-  "kyc_verified_by",
-  "notes_section",
-  "notes"
+  "kyc_verified_by"
  ],
-"fields": [
-   {
-    "fieldname": "naming_series",
-    "fieldtype": "Select",
-    "label": "Naming Series",
-    "options": "\nFMS-PER-.YYYY.-.#####.",
-    "default": "FMS-PER-.YYYY.-.#####.",
-    "hidden": 1
-   },
-   {
+ "fields": [
+  {
+   "default": "FMS-PER-.YYYY.-.#####.",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Naming Series",
+   "options": "\nFMS-PER-.YYYY.-.#####."
+  },
+  {
+   "fieldname": "first_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "First Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "middle_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Middle Name"
+  },
+  {
+   "fieldname": "last_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Last Name"
+  },
+  {
    "fieldname": "full_name",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Full Name",
-   "reqd": 1
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "date_of_birth",
@@ -62,20 +99,62 @@
    "options": "\nMale\nFemale\nOther\nNon-Individual"
   },
   {
-   "fieldname": "photo",
-   "fieldtype": "Attach Image",
-   "label": "Photo"
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "\nActive\nInactive\nDeceased"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pan_number",
+   "fieldtype": "Data",
+   "label": "PAN Number",
+   "unique": 1
+  },
+  {
+   "fieldname": "ckyc_number",
+   "fieldtype": "Data",
+   "label": "cKYC Number",
+   "unique": 1
+  },
+  {
+   "fieldname": "primary_contact_section",
+   "fieldtype": "Section Break",
+   "label": "Primary Contact"
+  },
+  {
+   "fieldname": "primary_mobile",
+   "fieldtype": "Data",
+   "label": "Primary Mobile",
+   "read_only": 1
+  },
+  {
+   "fieldname": "primary_whatsapp",
+   "fieldtype": "Data",
+   "label": "Primary WhatsApp",
+   "read_only": 1
+  },
+  {
+   "fieldname": "primary_email",
+   "fieldtype": "Data",
+   "label": "Primary Email",
+   "read_only": 1
   },
   {
    "fieldname": "contact_section",
    "fieldtype": "Section Break",
-   "label": "Contact Details"
+   "label": "Contact Numbers"
   },
   {
-   "fieldname": "contact_numbers",
+   "fieldname": "contact_details",
    "fieldtype": "Table",
    "label": "Contact Numbers",
-   "options": "FMS Contact Number"
+   "options": "FMS Contact Details"
   },
   {
    "fieldname": "email_section",
@@ -86,14 +165,7 @@
    "fieldname": "email_addresses",
    "fieldtype": "Table",
    "label": "Email Addresses",
-   "options": "FMS Email Address"
-  },
-  {
-   "fieldname": "pan",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "PAN",
-   "unique": 1
+   "options": "FMS Email Address Details"
   },
   {
    "fieldname": "kyc_section",
@@ -101,29 +173,21 @@
    "label": "KYC Documents"
   },
   {
-   "fieldname": "kyc_vault",
+   "fieldname": "kyc_documents",
    "fieldtype": "Table",
    "label": "KYC Documents",
-   "options": "FMS KYC Document"
+   "options": "FMS KYC Document Details"
   },
   {
-   "default": "Pending",
-   "fieldname": "kyc_status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "KYC Status",
-   "options": "\nPending\nVerified\nRejected"
+   "fieldname": "address_section",
+   "fieldtype": "Section Break",
+   "label": "Address"
   },
   {
-   "fieldname": "kyc_verified_on",
-   "fieldtype": "Datetime",
-   "label": "KYC Verified On"
-  },
-  {
-   "fieldname": "kyc_verified_by",
-   "fieldtype": "Link",
-   "label": "KYC Verified By",
-   "options": "User"
+   "fieldname": "address_html",
+   "fieldtype": "HTML",
+   "label": "Address",
+   "options": "Address"
   },
   {
    "fieldname": "notes_section",
@@ -136,20 +200,53 @@
    "label": "Notes"
   },
   {
-   "fieldname": "column_break_szeq",
+   "default": "Pending",
+   "fieldname": "kyc_status",
+   "fieldtype": "Select",
+   "label": "KYC Status",
+   "options": "\nPending\nVerified\nRejected",
+   "read_only": 1
+  },
+  {
+   "fieldname": "kyc_verified_on",
+   "fieldtype": "Datetime",
+   "label": "KYC Verified On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "kyc_verified_by",
+   "fieldtype": "Link",
+   "label": "KYC Verified By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_ebqm",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "column_break_nyre",
+   "fieldname": "column_break_bnud",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "display_picture",
+   "fieldtype": "Attach Image",
+   "label": "Display Picture"
+  },
+  {
+   "fieldname": "basic_details",
+   "fieldtype": "Section Break",
+   "label": "Basic Details"
   }
  ],
-  "links": [],
-  "modified": "2026-04-09 18:37:19.779803",
-  "modified_by": "Administrator",
-  "module": "FMS Core",
-  "name": "FMS Person",
-  "owner": "Administrator",
+ "image_field": "display_picture",
+ "links": [],
+ "modified": "2026-04-10 16:19:58.925948",
+ "modified_by": "Administrator",
+ "module": "FMS Core",
+ "name": "FMS Person",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
  "permissions": [
   {
    "create": 1,
@@ -160,6 +257,8 @@
   }
  ],
  "row_format": "Dynamic",
+ "search_fields": "pan_number, primary_mobile, primary_email",
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

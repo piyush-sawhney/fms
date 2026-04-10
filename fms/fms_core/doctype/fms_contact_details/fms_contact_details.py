@@ -1,8 +1,9 @@
-# Copyright (c) 2025, FMS and Contributors
+# Copyright (c) 2026, FMS and Contributors
 # License: MIT
+
 import frappe
 from frappe.model.document import Document
 
 
-class FMSContactNumber(Document):
+class FMSContactDetails(Document):
 	pass

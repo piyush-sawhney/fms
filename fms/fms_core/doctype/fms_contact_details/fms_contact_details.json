@@ -1,0 +1,70 @@
+{
+  "actions": [],
+  "creation": "2026-04-10 15:56:51.434187",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "number",
+    "type",
+    "is_whatsapp",
+    "is_active",
+    "is_primary"
+  ],
+  "fields": [
+    {
+      "fieldname": "number",
+      "fieldtype": "Phone",
+      "in_list_view": 1,
+      "label": "Number",
+      "reqd": 1
+    },
+    {
+      "default": "Mobile",
+      "fieldname": "type",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Type",
+      "options": "\nMobile\nLandline\nOffice"
+    },
+    {
+      "default": "0",
+      "fieldname": "is_whatsapp",
+      "fieldtype": "Check",
+      "in_list_view": 1,
+      "label": "Is WhatsApp"
+    },
+    {
+      "default": "Active",
+      "fieldname": "is_active",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Status",
+      "options": "\nActive\nInactive",
+      "color": [
+        {
+          "Active": "Green",
+          "Inactive": "Grey"
+        }
+      ]
+    },
+    {
+      "default": "0",
+      "fieldname": "is_primary",
+      "fieldtype": "Check",
+      "in_list_view": 1,
+      "label": "Is Primary"
+    }
+  ],
+  "istable": 1,
+  "links": [],
+  "modified": "2026-04-10",
+  "modified_by": "Administrator",
+  "module": "FMS Core",
+  "name": "FMS Contact Details",
+  "owner": "Administrator",
+  "permissions": [],
+  "row_format": "Dynamic",
+  "sort_field": "modified",
+  "sort_order": "DESC",
+  "states": []
+}
