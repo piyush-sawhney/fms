@@ -4,6 +4,7 @@ import re
 from datetime import date
 
 import frappe
+from cryptography.fernet import Fernet, InvalidToken
 from frappe import _
 from frappe.contacts.address_and_contact import (
 	delete_contact_and_address,
@@ -11,6 +12,146 @@ from frappe.contacts.address_and_contact import (
 )
 from frappe.model.document import Document
 from frappe.utils import flt
+from frappe.utils.file_manager import save_file
+
+from fms.fms_core.doctype.fms_settings.fms_settings import (
+	get_encryption_key,
+	get_next_version,
+)
+
+
+def get_or_create_kyc_folder(person_name: str):
+	safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in person_name)
+
+	kyc_base = "Home/KYC"
+	kyc_base_exists = frappe.db.get_value("File", {"file_name": "KYC", "folder": "Home", "is_folder": 1})
+	if not kyc_base_exists:
+		try:
+			base_folder = frappe.get_doc(
+				{
+					"doctype": "File",
+					"file_name": "KYC",
+					"is_folder": 1,
+					"folder": "Home",
+				}
+			)
+			base_folder.insert(ignore_if_duplicate=True)
+			frappe.db.commit()
+		except Exception:
+			pass
+
+	existing_folder = frappe.db.get_value(
+		"File",
+		{"file_name": safe_name, "folder": kyc_base, "is_folder": 1},
+		"name",
+	)
+	if existing_folder:
+		return frappe.get_doc("File", existing_folder)
+
+	kyc_folder = frappe.get_doc(
+		{
+			"doctype": "File",
+			"file_name": safe_name,
+			"is_folder": 1,
+			"folder": kyc_base,
+		}
+	)
+	kyc_folder.insert(ignore_if_duplicate=True)
+	frappe.db.commit()
+
+	return kyc_folder
+
+
+@frappe.whitelist()
+def upload_kyc_document(person_name: str, file_url: str, doc_name: str):
+	if not doc_name:
+		return {
+			"success": False,
+			"message": _("Document Number is required"),
+		}
+
+	encryption_key = get_encryption_key()
+
+	file_doc = None
+	if file_url:
+		file_doc = frappe.get_list(
+			"File",
+			filters={"file_url": file_url},
+			fields=["name", "file_name"],
+		)
+		if file_doc:
+			file_doc = frappe.get_doc("File", file_doc[0].name)
+
+	if not file_doc:
+		return {
+			"success": False,
+			"message": _("File not found"),
+		}
+
+	try:
+		full_path = file_doc.get_full_path()
+		with open(full_path, "rb") as f:
+			file_content = f.read()
+	except Exception as e:
+		return {
+			"success": False,
+			"message": _("Could not read file: {}").format(str(e)),
+		}
+
+	if not file_content:
+		return {
+			"success": False,
+			"message": _("Could not read file content"),
+		}
+
+	cipher = Fernet(encryption_key.encode())
+	encrypted_content = cipher.encrypt(file_content)
+
+	original_file_name = file_doc.file_name or ""
+	version = get_next_version(person_name, doc_name)
+	safe_doc_number = "".join(c if c.isalnum() or c in "-_" else "_" for c in doc_name)
+	encrypted_filename = f"{safe_doc_number}_v{version}.enc"
+
+	kyc_folder = get_or_create_kyc_folder(person_name)
+
+	new_file = save_file(
+		fname=encrypted_filename,
+		content=encrypted_content,
+		dt="FMS Person",
+		dn=person_name,
+		is_private=1,
+		folder=kyc_folder.name,
+	)
+
+	kyc_docs = frappe.get_all(
+		"FMS KYC Document Details",
+		filters={"parent": person_name, "document_number": doc_name},
+		fields=["name"],
+		limit=1,
+	)
+
+	if kyc_docs:
+		frappe.db.set_value(
+			"FMS KYC Document Details",
+			kyc_docs[0].name,
+			{
+				"file_url": new_file.file_url,
+				"file_name": encrypted_filename,
+				"original_file_name": original_file_name,
+			},
+		)
+		frappe.db.commit()
+
+	frappe.delete_doc("File", file_doc.name)
+	frappe.db.commit()
+
+	return {
+		"success": True,
+		"message": _("Document encrypted and saved"),
+		"file_url": new_file.file_url,
+		"file_name": encrypted_filename,
+		"original_file_name": original_file_name,
+	}
 
 
 class FMSPerson(Document):
@@ -25,6 +166,7 @@ class FMSPerson(Document):
 		self.validate_name_fields()
 		self.validate_no_duplicate_contacts()
 		self.validate_no_duplicate_emails()
+		self.validate_no_duplicate_kyc_docs()
 		self.auto_set_primary_contact()
 		self.auto_set_primary_email()
 		self.validate_only_one_primary_contact()
@@ -59,6 +201,22 @@ class FMSPerson(Document):
 							title=_("Validation Error"),
 						)
 					emails.append(email.email)
+
+	def validate_no_duplicate_kyc_docs(self):
+		if self.kyc_documents:
+			doc_numbers = []
+			for doc in self.kyc_documents:
+				if doc.document_number:
+					if doc.document_number in doc_numbers:
+						frappe.throw(
+							_(
+								"Duplicate document number {0} found in KYC documents".format(
+									doc.document_number
+								)
+							),
+							title=_("Validation Error"),
+						)
+					doc_numbers.append(doc.document_number)
 
 	def validate_only_one_primary_contact(self):
 		if self.contact_details:
@@ -128,12 +286,9 @@ class FMSPerson(Document):
 					if contact.is_primary:
 						if not self.primary_mobile:
 							self.primary_mobile = contact.number
-					if contact.is_whatsapp:
+					if contact.is_primary and contact.is_whatsapp:
 						if not self.primary_whatsapp:
 							self.primary_whatsapp = contact.number
-
-		if not self.primary_whatsapp and self.primary_mobile:
-			self.primary_whatsapp = self.primary_mobile
 
 		if self.email_addresses:
 			for email in self.email_addresses:
@@ -192,55 +347,128 @@ class FMSPerson(Document):
 
 
 @frappe.whitelist()
-def get_decrypted_kyc(
-	person_name: str,
-	doc_name: str,
-	idempotency_key: str,
-	otc: str,
-) -> bytes:
-	frappe.flags.in_kyc_decrypt = True
+def request_kyc_otp(person_name, doc_name):
+	otp = str(frappe.utils.random_string(6))
+	cache_key = f"kyc_otp:{frappe.session.user}:{person_name}:{doc_name}"
+	frappe.cache().set_value(cache_key, otp, expires_in_sec=300)
 
-	existing_key = frappe.cache().get_value(f"kyc_decrypt:{idempotency_key}")
-	if existing_key:
+	frappe.msgprint(
+		_("OTP for KYC download is: <b>{0}</b>").format(otp),
+		_("OTP Sent"),
+	)
+
+	return {
+		"message": _("OTP for KYC download is: {}").format(otp),
+		"otp": otp,
+	}
+
+
+@frappe.whitelist()
+def download_kyc_document(person_name, doc_name, otp):
+	cache_key = f"kyc_otp:{frappe.session.user}:{person_name}:{doc_name}"
+	cached_otp = frappe.cache().get_value(cache_key)
+
+	if not cached_otp or cached_otp != otp:
 		frappe.throw(
-			_("This request has already been processed"),
-			title=_("Idempotency Error"),
-		)
-
-	person = frappe.get_doc("FMS Person", person_name)
-
-	valid_otc = frappe.cache().get_value(f"kyc_otc:{person_name}")
-	if not valid_otc or valid_otc != otc:
-		frappe.throw(
-			_("Invalid One-Time Code"),
+			_("Invalid or expired OTP"),
 			title=_("Authentication Error"),
 		)
 
+	frappe.cache().delete_value(cache_key)
+
+	kyc_docs = frappe.get_all(
+		"FMS KYC Document Details",
+		filters={"parent": person_name},
+		fields=[
+			"name",
+			"document_number",
+			"file_url",
+			"original_file_name",
+			"document_type",
+		],
+	)
+
 	doc = None
-	for kyc_doc in person.kyc_documents:
-		if kyc_doc.name == doc_name:
+	original_file_name = ""
+	document_type = ""
+	for kyc_doc in kyc_docs:
+		if kyc_doc.name == doc_name or str(kyc_doc.document_number).upper() == str(doc_name).upper():
 			doc = kyc_doc
+			original_file_name = kyc_doc.get("original_file_name") or ""
+			document_type = kyc_doc.get("document_type") or "DOC"
 			break
 
-	if not doc or not doc.attachment:
-		frappe.throw(_("KYC document not found"))
+	if not doc or not doc.file_url:
+		frappe.throw(_("No encrypted file to download"))
 
-	file_path = doc.attachment
 	try:
+		key = get_encryption_key()
+		cipher = Fernet(key.encode())
+
+		file_name = doc.file_url.split("/")[-1] if doc.file_url else None
+		if not file_name:
+			frappe.throw(_("No file path found"))
+
+		file_doc = frappe.get_list(
+			"File",
+			filters={"file_name": file_name},
+			fields=["name"],
+			limit=1,
+		)
+		if not file_doc:
+			frappe.throw(_("Encrypted file not found"))
+
+		file_doc = frappe.get_doc("File", file_doc[0].name)
+		file_path = file_doc.get_full_path()
+
 		with open(file_path, "rb") as f:
-			content = f.read()
-	except OSError:
-		frappe.throw(_("Unable to read KYC document"))
+			encrypted_content = f.read()
 
-	decrypted_content = _decrypt_kyc_content(content)
+		decrypted_content = cipher.decrypt(encrypted_content)
 
-	frappe.cache().set_value(f"kyc_decrypt:{idempotency_key}", 1)
+	except InvalidToken:
+		frappe.throw(
+			_("Unable to decrypt document. Encryption key may have changed."),
+			title=_("Decryption Error"),
+		)
+	except FileNotFoundError:
+		frappe.throw(_("Encrypted file not found on server"), title=_("File Error"))
+	except Exception as e:
+		frappe.throw(
+			_("Unable to read KYC document: {}").format(str(e)),
+			title=_("Error"),
+		)
 
-	return decrypted_content
+	try:
+		person = frappe.get_doc("FMS Person", person_name)
+		person_full_name = person.full_name or "Unknown"
+	except Exception:
+		person_full_name = "Unknown"
 
+	original_extension = "pdf"
+	if original_file_name:
+		parts = original_file_name.rsplit(".", 1)
+		if len(parts) > 1:
+			original_extension = parts[1].lower()
 
-def _decrypt_kyc_content(content: bytes) -> bytes:
-	return content
+	safe_full_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in person_full_name)
+	safe_doc_number = "".join(c if c.isalnum() or c in "-_" else "_" for c in str(doc.document_number))
+	download_filename = f"{safe_full_name}_{document_type}_{safe_doc_number}.{original_extension}"
+
+	content_types = {
+		"pdf": "application/pdf",
+		"jpg": "image/jpeg",
+		"jpeg": "image/jpeg",
+		"png": "image/png",
+		"gif": "image/gif",
+	}
+	content_type = content_types.get(original_extension, "application/octet-stream")
+
+	frappe.response.filename = download_filename
+	frappe.response.filecontent = decrypted_content
+	frappe.response.content_type = content_type
+	frappe.response.type = "download"
+	frappe.response.display_content_as = "attachment"
 
 
 def get_permission_query_conditions(user: str | None = None) -> str:

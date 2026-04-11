@@ -25,8 +25,8 @@ app_license = "mit"
 # ------------------
 
 # include js, css files in header of desk.html
+app_include_js = "/assets/fms/js/fms_person.js"
 # app_include_css = "/assets/fms/css/fms.css"
-# app_include_js = "/assets/fms/js/fms.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/fms/css/fms.css"
@@ -43,7 +43,10 @@ app_license = "mit"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+# doctype_js = {"FMS Person": "fms/fms_core/doctype/fms_person/fms_person.js"}
+# doctype_js = {
+#     "FMS Person": "/apps/fms/fms/fms_core/doctype/fms_person/fms_person.js",
+# }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}

@@ -1,0 +1,68 @@
+{
+  "actions": [],
+  "allow_rename": 1,
+  "creation": "2026-04-10 18:01:03.364818",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "kyc_encryption_key",
+    "show_key",
+    "test_key",
+    "generate_key",
+    "debug_key"
+  ],
+  "fields": [
+   {
+     "fieldname": "kyc_encryption_key",
+     "fieldtype": "Data",
+     "label": "KYC Encryption Key",
+     "description": "Enter a valid Fernet key (44 char base64 encoded)"
+    },
+    {
+     "fieldname": "show_key",
+     "fieldtype": "Button",
+     "label": "Show Key"
+    },
+    {
+     "fieldname": "test_key",
+     "fieldtype": "Button",
+     "label": "Test Key"
+    },
+    {
+     "fieldname": "generate_key",
+     "fieldtype": "Button",
+     "label": "Generate Key"
+    },
+    {
+     "fieldname": "debug_key",
+     "fieldtype": "Button",
+     "label": "Debug"
+    }
+  ],
+  "grid_page_length": 50,
+  "index_web_pages_for_search": 1,
+  "issingle": 1,
+  "links": [],
+  "modified": "2026-04-10 18:01:33.214960",
+  "modified_by": "Administrator",
+  "module": "FMS Core",
+  "name": "FMS Settings",
+  "owner": "Administrator",
+  "permissions": [
+   {
+    "create": 1,
+    "delete": 1,
+    "email": 1,
+    "print": 1,
+    "read": 1,
+    "role": "System Manager",
+    "share": 1,
+    "write": 1
+   }
+  ],
+  "row_format": "Dynamic",
+  "rows_threshold_for_grid_search": 20,
+  "sort_field": "creation",
+  "sort_order": "DESC",
+  "states": []
+}
