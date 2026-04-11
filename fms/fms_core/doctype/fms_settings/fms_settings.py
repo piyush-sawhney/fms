@@ -1,10 +1,8 @@
 # Copyright (c) 2026, KNAPS and contributors
 # For license information, please see license.txt
 
-import re
-
 import frappe
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 from frappe import _
 from frappe.model.document import Document
 
@@ -33,15 +31,6 @@ def get_encryption_key() -> str:
 
 
 @frappe.whitelist()
-def debug_encryption_key():
-	doc = frappe.get_single("FMS Settings")
-	return {
-		"key_length": len(doc.kyc_encryption_key or ""),
-		"key_value": repr(doc.kyc_encryption_key),
-	}
-
-
-@frappe.whitelist()
 def has_encryption_key() -> bool:
 	doc = frappe.get_single("FMS Settings")
 	key = doc.kyc_encryption_key
@@ -49,19 +38,7 @@ def has_encryption_key() -> bool:
 
 
 @frappe.whitelist()
-def show_encryption_key():
-	key = get_encryption_key()
-	frappe.msgprint(
-		_(
-			"KYC Encryption Key: <br><b style='font-size:14px; word-break:break-all; background:#f5f5f5; padding:8px; border-radius:4px; display:block; margin-top:5px;'>{0}</b>"
-		).format(key),
-		_("Encryption Key"),
-	)
-	return key
-
-
-@frappe.whitelist()
-def test_encryption_key():
+def test_encryption_key() -> dict:
 	doc = frappe.get_single("FMS Settings")
 	key = doc.kyc_encryption_key
 
@@ -77,14 +54,12 @@ def test_encryption_key():
 			return {"success": True, "message": "Key is valid and working!"}
 		else:
 			return {"success": False, "message": "Key test failed - data mismatch"}
-	except Exception as e:
-		return {"success": False, "message": "Key is invalid: " + str(e)}
+	except Exception:
+		return {"success": False, "message": "Key is invalid"}
 
 
-@frappe.whitelist()
-def generate_encryption_key():
-	new_key = Fernet.generate_key().decode()
-	return {"key": new_key}
+def generate_encryption_key() -> str:
+	return Fernet.generate_key().decode()
 
 
 def get_next_version(person_name: str, doc_number: str) -> int:
@@ -102,8 +77,12 @@ def get_next_version(person_name: str, doc_number: str) -> int:
 
 	versions = []
 	for f in existing:
-		match = re.match(r".*_v(\d+)\.enc", f.file_name or "")
-		if match:
-			versions.append(int(match.group(1)))
+		fname = f.file_name or ""
+		if fname.endswith(".enc"):
+			core = fname[:-4]
+			if "_v" in core:
+				ver_str = core.split("_v")[-1]
+				if ver_str.isdigit():
+					versions.append(int(ver_str))
 
 	return max(versions) + 1 if versions else 1

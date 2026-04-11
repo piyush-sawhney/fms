@@ -5,6 +5,10 @@ from datetime import date
 
 import frappe
 from cryptography.fernet import Fernet, InvalidToken
+
+STATUS_ACTIVE = "Active"
+MAX_AGE = 120
+
 from frappe import _
 from frappe.contacts.address_and_contact import (
 	delete_contact_and_address,
@@ -14,15 +18,14 @@ from frappe.model.document import Document
 from frappe.utils import flt
 from frappe.utils.file_manager import save_file
 
+from fms.fms_core import utils as fms_utils
 from fms.fms_core.doctype.fms_settings.fms_settings import (
 	get_encryption_key,
 	get_next_version,
 )
 
 
-def get_or_create_kyc_folder(person_name: str):
-	safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in person_name)
-
+def get_kyc_base_folder() -> str:
 	kyc_base = "Home/KYC"
 	kyc_base_exists = frappe.db.get_value("File", {"file_name": "KYC", "folder": "Home", "is_folder": 1})
 	if not kyc_base_exists:
@@ -37,8 +40,14 @@ def get_or_create_kyc_folder(person_name: str):
 			)
 			base_folder.insert(ignore_if_duplicate=True)
 			frappe.db.commit()
-		except Exception:
-			pass
+		except Exception as e:
+			frappe.log_error("Failed to create KYC base folder", str(e))
+	return kyc_base
+
+
+def get_or_create_kyc_folder(person_name: str):
+	safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in person_name)
+	kyc_base = get_kyc_base_folder()
 
 	existing_folder = frappe.db.get_value(
 		"File",
@@ -46,28 +55,49 @@ def get_or_create_kyc_folder(person_name: str):
 		"name",
 	)
 	if existing_folder:
-		return frappe.get_doc("File", existing_folder)
+		folder_doc = frappe.get_doc("File", existing_folder)
+		if folder_doc:
+			return folder_doc
 
-	kyc_folder = frappe.get_doc(
-		{
-			"doctype": "File",
-			"file_name": safe_name,
-			"is_folder": 1,
-			"folder": kyc_base,
-		}
-	)
-	kyc_folder.insert(ignore_if_duplicate=True)
-	frappe.db.commit()
-
-	return kyc_folder
+	try:
+		kyc_folder = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": safe_name,
+				"is_folder": 1,
+				"folder": kyc_base,
+			}
+		)
+		kyc_folder.insert(ignore_if_duplicate=True)
+		frappe.db.commit()
+		return kyc_folder
+	except frappe.DuplicateEntryError:
+		frappe.db.rollback()
+		existing = frappe.db.get_value(
+			"File",
+			{"file_name": safe_name, "folder": kyc_base, "is_folder": 1},
+			"name",
+		)
+		if existing:
+			return frappe.get_doc("File", existing)
+	except Exception as e:
+		frappe.log_error("Failed to create KYC folder", str(e))
+		frappe.db.rollback()
+	raise frappe.DoesNotExistError(_("Could not create KYC folder"))
 
 
 @frappe.whitelist()
-def upload_kyc_document(person_name: str, file_url: str, doc_name: str):
+def upload_kyc_document(person_name: str, file_url: str, doc_name: str, idempotency_key: str | None = None):
 	if not doc_name:
 		return {
 			"success": False,
 			"message": _("Document Number is required"),
+		}
+
+	if not fms_utils.check_idempotency(idempotency_key, "upload"):
+		return {
+			"success": False,
+			"message": _("This request has already been processed"),
 		}
 
 	encryption_key = get_encryption_key()
@@ -178,6 +208,8 @@ class FMSPerson(Document):
 		self.set_age()
 		self.validate_date_of_birth()
 
+	MAX_AGE = 120
+
 	def validate_no_duplicate_contacts(self):
 		if self.contact_details:
 			numbers = []
@@ -220,19 +252,23 @@ class FMSPerson(Document):
 
 	def validate_only_one_primary_contact(self):
 		if self.contact_details:
-			primary_count = sum(1 for c in self.contact_details if c.is_primary)
-			if primary_count > 1:
+			active_primary_count = sum(
+				1 for c in self.contact_details if c.is_primary and c.is_active == STATUS_ACTIVE
+			)
+			if active_primary_count > 1:
 				frappe.throw(
-					_("Only one contact can be marked as primary"),
+					_("Only one active contact can be marked as primary"),
 					title=_("Validation Error"),
 				)
 
 	def validate_only_one_primary_email(self):
 		if self.email_addresses:
-			primary_count = sum(1 for e in self.email_addresses if e.is_primary)
-			if primary_count > 1:
+			active_primary_count = sum(
+				1 for e in self.email_addresses if e.is_primary and e.is_active == STATUS_ACTIVE
+			)
+			if active_primary_count > 1:
 				frappe.throw(
-					_("Only one email can be marked as primary"),
+					_("Only one active email can be marked as primary"),
 					title=_("Validation Error"),
 				)
 
@@ -256,7 +292,10 @@ class FMSPerson(Document):
 
 	def validate_name_fields(self):
 		if not self.first_name:
-			frappe.throw(_("First Name is required"))
+			if self.is_new():
+				frappe.throw(_("First Name is required"))
+			elif not self.get_db_value("first_name"):
+				frappe.throw(_("First Name is required"))
 
 	def validate_aadhaar_prohibited(self):
 		if self.kyc_documents:
@@ -281,14 +320,35 @@ class FMSPerson(Document):
 		self.primary_email = None
 
 		if self.contact_details:
+			# First pass: set primary fields from contacts marked as primary
 			for contact in self.contact_details:
-				if contact.is_active == "Active":
-					if contact.is_primary:
-						if not self.primary_mobile:
-							self.primary_mobile = contact.number
-					if contact.is_primary and contact.is_whatsapp:
-						if not self.primary_whatsapp:
-							self.primary_whatsapp = contact.number
+				if contact.is_active == "Active" and contact.is_primary:
+					if not self.primary_mobile:
+						self.primary_mobile = contact.number
+					if contact.is_whatsapp and not self.primary_whatsapp:
+						self.primary_whatsapp = contact.number
+
+			# Second pass: if no primary whatsapp found, set from any active whatsapp contact
+			if not self.primary_whatsapp:
+				for contact in self.contact_details:
+					if contact.is_active == "Active" and contact.is_whatsapp:
+						self.primary_whatsapp = contact.number
+						break
+
+			# Third pass: handle fallback cases
+			if self.primary_mobile and not self.primary_whatsapp:
+				# Have primary mobile but no whatsapp - fallback whatsapp to mobile
+				self.primary_whatsapp = self.primary_mobile
+			elif not self.primary_mobile and self.primary_whatsapp:
+				# Have primary whatsapp but no mobile - fallback mobile to whatsapp
+				self.primary_mobile = self.primary_whatsapp
+			elif not self.primary_mobile and not self.primary_whatsapp:
+				# Have neither - fallback to first active contact
+				for contact in self.contact_details:
+					if contact.is_active == "Active":
+						self.primary_mobile = contact.number
+						self.primary_whatsapp = contact.number
+						break
 
 		if self.email_addresses:
 			for email in self.email_addresses:
@@ -335,7 +395,8 @@ class FMSPerson(Document):
 			if isinstance(dob, str):
 				dob = frappe.utils.getdate(dob)
 			today = date.today()
-			self.age = flt(today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day)))
+			age = flt(today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day)))
+			self.age = max(0, age)
 
 	def validate_date_of_birth(self):
 		if self.date_of_birth:
@@ -344,22 +405,41 @@ class FMSPerson(Document):
 				dob = frappe.utils.getdate(dob)
 			if dob > frappe.utils.getdate(frappe.utils.today()):
 				frappe.throw(_("Date of Birth cannot be in the future"))
+			age_years = (frappe.utils.getdate(frappe.utils.today()) - dob).days // 365
+			if age_years < 0:
+				frappe.throw(_("Person cannot have negative age"))
+			if age_years > MAX_AGE:
+				frappe.throw(_("Person cannot be older than {0} years").format(MAX_AGE))
 
 
 @frappe.whitelist()
-def request_kyc_otp(person_name, doc_name):
-	otp = str(frappe.utils.random_string(6))
+def request_kyc_otp(person_name: str, doc_name: str, idempotency_key: str | None = None):
+	if not fms_utils.check_otp_rate_limit(frappe.session.user, person_name, doc_name):
+		return {
+			"success": False,
+			"message": _("OTP already sent. Please wait 60 seconds before requesting again."),
+		}
+
+	if not fms_utils.check_idempotency(idempotency_key, "otp"):
+		return {
+			"success": False,
+			"message": _("This request has already been processed"),
+		}
+
+	otp = fms_utils.generate_otp(6)
 	cache_key = f"kyc_otp:{frappe.session.user}:{person_name}:{doc_name}"
 	frappe.cache().set_value(cache_key, otp, expires_in_sec=300)
 
-	frappe.msgprint(
-		_("OTP for KYC download is: <b>{0}</b>").format(otp),
-		_("OTP Sent"),
-	)
+	try:
+		person = frappe.get_doc("FMS Person", person_name)
+		if person.primary_email:
+			fms_utils.send_otp_email(person.primary_email, doc_name, otp)
+	except frappe.DoesNotExistError:
+		pass
 
 	return {
-		"message": _("OTP for KYC download is: {}").format(otp),
-		"otp": otp,
+		"success": True,
+		"message": _("OTP has been sent to your registered email address."),
 	}
 
 
