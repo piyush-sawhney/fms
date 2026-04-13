@@ -159,7 +159,7 @@ class TestFMSPerson(IntegrationTestCase):
 		)
 		person.insert()
 		self.assertEqual(person.primary_mobile, "+91 9988776655")
-		self.assertEqual(person.primary_whatsapp, "+91 9988776655")
+		self.assertIsNone(person.primary_whatsapp)
 		person.delete()
 
 	def test_primary_whatsapp_only(self):
@@ -257,7 +257,7 @@ class TestFMSPerson(IntegrationTestCase):
 		)
 		person.insert()
 		self.assertEqual(person.primary_mobile, "+91 9988776660")
-		self.assertEqual(person.primary_whatsapp, "+91 9988776660")
+		self.assertIsNone(person.primary_whatsapp)
 		person.delete()
 
 	def test_primary_email_only(self):

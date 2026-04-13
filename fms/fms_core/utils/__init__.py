@@ -86,15 +86,9 @@ def sync_primary_fields(contact_details, email_addresses) -> dict:
 					primary_whatsapp = contact.number
 					break
 
-		# Third pass: handle fallback cases
-		if primary_mobile and not primary_whatsapp:
-			# Have primary mobile but no whatsapp - fallback whatsapp to mobile
-			primary_whatsapp = primary_mobile
-		elif not primary_mobile and primary_whatsapp:
-			# Have primary whatsapp but no mobile - fallback mobile to whatsapp
-			primary_mobile = primary_whatsapp
-		elif not primary_mobile and not primary_whatsapp:
-			# Have neither - fallback to first active contact
+		# Third pass: only fallback if neither mobile nor whatsapp is explicitly set
+		# Do NOT override user's explicit choice: if user unchecked is_whatsapp, respect it
+		if not primary_mobile and not primary_whatsapp:
 			for contact in contact_details:
 				if contact.is_active == "Active":
 					primary_mobile = contact.number

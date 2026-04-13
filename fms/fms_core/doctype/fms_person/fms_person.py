@@ -283,6 +283,7 @@ class FMSPerson(Document):
 				for contact in self.contact_details:
 					if contact.is_active == "Active":
 						contact.is_primary = 1
+						contact.is_whatsapp = 1
 						break
 
 	def auto_set_primary_email(self):
