@@ -59,3 +59,55 @@ def send_otp_email(recipient: str, doc_name: str, otp: str) -> None:
 			"This OTP is valid for 5 minutes."
 		).format(doc_name, otp),
 	)
+
+
+def sync_primary_fields(contact_details, email_addresses) -> dict:
+	"""
+	Sync primary contact fields from contact and email details.
+	Returns a dict with primary_mobile, primary_whatsapp, and primary_email.
+	"""
+	primary_mobile = None
+	primary_whatsapp = None
+	primary_email = None
+
+	if contact_details:
+		# First pass: set primary fields from contacts marked as primary
+		for contact in contact_details:
+			if contact.is_active == "Active" and contact.is_primary:
+				if not primary_mobile:
+					primary_mobile = contact.number
+				if contact.is_whatsapp and not primary_whatsapp:
+					primary_whatsapp = contact.number
+
+		# Second pass: if no primary whatsapp found, set from any active whatsapp contact
+		if not primary_whatsapp:
+			for contact in contact_details:
+				if contact.is_active == "Active" and contact.is_whatsapp:
+					primary_whatsapp = contact.number
+					break
+
+		# Third pass: handle fallback cases
+		if primary_mobile and not primary_whatsapp:
+			# Have primary mobile but no whatsapp - fallback whatsapp to mobile
+			primary_whatsapp = primary_mobile
+		elif not primary_mobile and primary_whatsapp:
+			# Have primary whatsapp but no mobile - fallback mobile to whatsapp
+			primary_mobile = primary_whatsapp
+		elif not primary_mobile and not primary_whatsapp:
+			# Have neither - fallback to first active contact
+			for contact in contact_details:
+				if contact.is_active == "Active":
+					primary_mobile = contact.number
+					primary_whatsapp = contact.number
+					break
+
+	if email_addresses:
+		for email in email_addresses:
+			if email.is_active == "Active" and email.is_primary and not primary_email:
+				primary_email = email.email
+
+	return {
+		"primary_mobile": primary_mobile,
+		"primary_whatsapp": primary_whatsapp,
+		"primary_email": primary_email,
+	}

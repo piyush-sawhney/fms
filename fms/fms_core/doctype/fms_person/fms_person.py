@@ -7,7 +7,7 @@ import frappe
 from cryptography.fernet import Fernet, InvalidToken
 
 STATUS_ACTIVE = "Active"
-MAX_AGE = 120
+MAX_AGE = 140
 
 from frappe import _
 from frappe.contacts.address_and_contact import (
@@ -15,7 +15,6 @@ from frappe.contacts.address_and_contact import (
 	load_address_and_contact,
 )
 from frappe.model.document import Document
-from frappe.utils import flt
 from frappe.utils.file_manager import save_file
 
 from fms.fms_core import utils as fms_utils
@@ -108,6 +107,7 @@ def upload_kyc_document(person_name: str, file_url: str, doc_name: str, idempote
 			"File",
 			filters={"file_url": file_url},
 			fields=["name", "file_name"],
+			limit=1,
 		)
 		if file_doc:
 			file_doc = frappe.get_doc("File", file_doc[0].name)
@@ -172,8 +172,14 @@ def upload_kyc_document(person_name: str, file_url: str, doc_name: str, idempote
 		)
 		frappe.db.commit()
 
-	frappe.delete_doc("File", file_doc.name)
-	frappe.db.commit()
+	if file_doc and file_doc.name:
+		try:
+			frappe.delete_doc("File", file_doc.name)
+			frappe.db.commit()
+		except frappe.DoesNotExistError:
+			pass
+		except Exception as e:
+			frappe.log_error("Failed to delete original file", str(e))
 
 	return {
 		"success": True,
@@ -207,8 +213,6 @@ class FMSPerson(Document):
 		self.validate_ckyc()
 		self.set_age()
 		self.validate_date_of_birth()
-
-	MAX_AGE = 120
 
 	def validate_no_duplicate_contacts(self):
 		if self.contact_details:
@@ -315,45 +319,10 @@ class FMSPerson(Document):
 		self.full_name = " ".join(parts).strip()
 
 	def sync_primary_fields(self):
-		self.primary_mobile = None
-		self.primary_whatsapp = None
-		self.primary_email = None
-
-		if self.contact_details:
-			# First pass: set primary fields from contacts marked as primary
-			for contact in self.contact_details:
-				if contact.is_active == "Active" and contact.is_primary:
-					if not self.primary_mobile:
-						self.primary_mobile = contact.number
-					if contact.is_whatsapp and not self.primary_whatsapp:
-						self.primary_whatsapp = contact.number
-
-			# Second pass: if no primary whatsapp found, set from any active whatsapp contact
-			if not self.primary_whatsapp:
-				for contact in self.contact_details:
-					if contact.is_active == "Active" and contact.is_whatsapp:
-						self.primary_whatsapp = contact.number
-						break
-
-			# Third pass: handle fallback cases
-			if self.primary_mobile and not self.primary_whatsapp:
-				# Have primary mobile but no whatsapp - fallback whatsapp to mobile
-				self.primary_whatsapp = self.primary_mobile
-			elif not self.primary_mobile and self.primary_whatsapp:
-				# Have primary whatsapp but no mobile - fallback mobile to whatsapp
-				self.primary_mobile = self.primary_whatsapp
-			elif not self.primary_mobile and not self.primary_whatsapp:
-				# Have neither - fallback to first active contact
-				for contact in self.contact_details:
-					if contact.is_active == "Active":
-						self.primary_mobile = contact.number
-						self.primary_whatsapp = contact.number
-						break
-
-		if self.email_addresses:
-			for email in self.email_addresses:
-				if email.is_active == "Active" and email.is_primary and not self.primary_email:
-					self.primary_email = email.email
+		primary_fields = fms_utils.sync_primary_fields(self.contact_details, self.email_addresses)
+		self.primary_mobile = primary_fields["primary_mobile"]
+		self.primary_whatsapp = primary_fields["primary_whatsapp"]
+		self.primary_email = primary_fields["primary_email"]
 
 	def validate_pan(self):
 		if self.pan_number:
@@ -395,20 +364,59 @@ class FMSPerson(Document):
 			if isinstance(dob, str):
 				dob = frappe.utils.getdate(dob)
 			today = date.today()
-			age = flt(today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day)))
+			age = today.year - dob.year
+			if (today.month, today.day) < (dob.month, dob.day):
+				age -= 1
 			self.age = max(0, age)
+			self.set_age_formatted(dob)
+		else:
+			self.age = 0
+			self.age_formatted = ""
+
+	def set_age_formatted(self, dob):
+		today = date.today()
+		years = today.year - dob.year
+		months = today.month - dob.month
+		days = today.day - dob.day
+		if days < 0:
+			months -= 1
+			prev_month = today.month - 1 if today.month > 1 else 12
+			days_in_prev_month = (date(today.year, prev_month + 1, 1) - date(today.year, prev_month, 1)).days
+			days += days_in_prev_month
+		if months < 0:
+			years -= 1
+			months += 12
+		years = max(0, years)
+		months = max(0, months)
+		days = max(0, days)
+		parts = []
+		if years > 0:
+			parts.append(f"{years} year{'s' if years != 1 else ''}")
+		if months > 0:
+			parts.append(f"{months} month{'s' if months != 1 else ''}")
+		if days > 0:
+			parts.append(f"{days} day{'s' if days != 1 else ''}")
+		if not parts:
+			self.age_formatted = "0 days"
+		elif len(parts) > 1:
+			self.age_formatted = ", ".join(parts[:-1]) + " and " + parts[-1]
+		else:
+			self.age_formatted = parts[0]
 
 	def validate_date_of_birth(self):
 		if self.date_of_birth:
 			dob = self.date_of_birth
 			if isinstance(dob, str):
 				dob = frappe.utils.getdate(dob)
-			if dob > frappe.utils.getdate(frappe.utils.today()):
+			today = frappe.utils.getdate(frappe.utils.today())
+			if dob > today:
 				frappe.throw(_("Date of Birth cannot be in the future"))
-			age_years = (frappe.utils.getdate(frappe.utils.today()) - dob).days // 365
-			if age_years < 0:
+			age = today.year - dob.year
+			if (today.month, today.day) < (dob.month, dob.day):
+				age -= 1
+			if age < 0:
 				frappe.throw(_("Person cannot have negative age"))
-			if age_years > MAX_AGE:
+			if age > MAX_AGE:
 				frappe.throw(_("Person cannot be older than {0} years").format(MAX_AGE))
 
 
@@ -431,11 +439,11 @@ def request_kyc_otp(person_name: str, doc_name: str, idempotency_key: str | None
 	frappe.cache().set_value(cache_key, otp, expires_in_sec=300)
 
 	try:
-		person = frappe.get_doc("FMS Person", person_name)
-		if person.primary_email:
+		person = frappe.db.get_value("FMS Person", person_name, ["primary_email"], as_dict=True)
+		if person and person.primary_email:
 			fms_utils.send_otp_email(person.primary_email, doc_name, otp)
-	except frappe.DoesNotExistError:
-		pass
+	except Exception as e:
+		frappe.log_error("Failed to get person primary email", str(e))
 
 	return {
 		"success": True,
@@ -448,13 +456,24 @@ def download_kyc_document(person_name, doc_name, otp):
 	cache_key = f"kyc_otp:{frappe.session.user}:{person_name}:{doc_name}"
 	cached_otp = frappe.cache().get_value(cache_key)
 
+	verify_rate_key = f"kyc_otp_verify_rate:{frappe.session.user}:{person_name}:{doc_name}"
+	if frappe.cache().get_value(verify_rate_key):
+		frappe.throw(
+			_("Too many failed attempts. Please try again after 60 seconds."),
+			title=_("Rate Limit Exceeded"),
+		)
+
 	if not cached_otp or cached_otp != otp:
+		frappe.cache().set_value(verify_rate_key, "1", expires_in_sec=60)
 		frappe.throw(
 			_("Invalid or expired OTP"),
 			title=_("Authentication Error"),
 		)
 
 	frappe.cache().delete_value(cache_key)
+
+	verify_rate_key = f"kyc_otp_verify_rate:{frappe.session.user}:{person_name}:{doc_name}"
+	frappe.cache().delete_value(verify_rate_key)
 
 	kyc_docs = frappe.get_all(
 		"FMS KYC Document Details",
@@ -489,16 +508,16 @@ def download_kyc_document(person_name, doc_name, otp):
 		if not file_name:
 			frappe.throw(_("No file path found"))
 
-		file_doc = frappe.get_list(
+		file_doc_list = frappe.get_list(
 			"File",
 			filters={"file_name": file_name},
 			fields=["name"],
 			limit=1,
 		)
-		if not file_doc:
+		if not file_doc_list:
 			frappe.throw(_("Encrypted file not found"))
 
-		file_doc = frappe.get_doc("File", file_doc[0].name)
+		file_doc = frappe.get_doc("File", file_doc_list[0].name)
 		file_path = file_doc.get_full_path()
 
 		with open(file_path, "rb") as f:
@@ -514,15 +533,17 @@ def download_kyc_document(person_name, doc_name, otp):
 	except FileNotFoundError:
 		frappe.throw(_("Encrypted file not found on server"), title=_("File Error"))
 	except Exception as e:
+		frappe.log_error("Failed to decrypt KYC document", str(e))
 		frappe.throw(
 			_("Unable to read KYC document: {}").format(str(e)),
 			title=_("Error"),
 		)
 
 	try:
-		person = frappe.get_doc("FMS Person", person_name)
-		person_full_name = person.full_name or "Unknown"
-	except Exception:
+		person = frappe.db.get_value("FMS Person", person_name, ["full_name"], as_dict=True)
+		person_full_name = person.full_name if person and person.full_name else "Unknown"
+	except Exception as e:
+		frappe.log_error("Failed to get person details", str(e))
 		person_full_name = "Unknown"
 
 	original_extension = "pdf"

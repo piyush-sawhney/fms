@@ -5,19 +5,19 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": [
-  "basic_details",
-  "naming_series",
-  "first_name",
-  "middle_name",
-  "last_name",
-  "full_name",
-  "column_break_1",
-  "date_of_birth",
-  "age",
-  "gender",
-  "status",
-  "column_break_2",
+  "field_order": [
+   "basic_details",
+   "naming_series",
+   "first_name",
+   "middle_name",
+   "last_name",
+   "full_name",
+   "column_break_1",
+   "date_of_birth",
+   "age_formatted",
+   "gender",
+   "status",
+   "column_break_2",
   "pan_number",
   "ckyc_number",
   "display_picture",
@@ -76,24 +76,28 @@
    "label": "Full Name",
    "read_only": 1
   },
-  {
-   "fieldname": "column_break_1",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "date_of_birth",
-   "fieldtype": "Date",
-   "label": "Date of Birth"
-  },
-  {
-   "fieldname": "age",
-   "fieldtype": "Int",
-   "label": "Age",
-   "non_negative": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "gender",
+   {
+    "fieldname": "column_break_1",
+    "fieldtype": "Column Break"
+   },
+   {
+    "fieldname": "date_of_birth",
+    "fieldtype": "Date",
+    "label": "Date of Birth"
+   },
+   {
+    "fieldname": "age_formatted",
+    "fieldtype": "Data",
+    "label": "Age",
+    "read_only": 1
+   },
+   {
+    "fieldname": "age",
+    "fieldtype": "Int",
+    "hidden": 1
+   },
+   {
+    "fieldname": "gender",
    "fieldtype": "Select",
    "label": "Gender",
    "options": "\nMale\nFemale\nOther\nNon-Individual"
@@ -117,10 +121,11 @@
    "unique": 1
   },
   {
-   "fieldname": "ckyc_number",
-   "fieldtype": "Data",
-   "label": "cKYC Number",
-   "unique": 1
+    "fieldname": "ckyc_number",
+    "fieldtype": "Data",
+    "label": "cKYC Number",
+    "search_index": 1,
+    "unique": 1
   },
   {
    "fieldname": "primary_contact_section",
@@ -128,11 +133,12 @@
    "label": "Primary Contact"
   },
   {
-   "fieldname": "primary_mobile",
-   "fieldtype": "Data",
-   "label": "Primary Mobile",
-   "read_only": 1
-  },
+    "fieldname": "primary_mobile",
+    "fieldtype": "Data",
+    "label": "Primary Mobile",
+    "read_only": 1,
+    "search_index": 1
+   },
   {
    "fieldname": "primary_whatsapp",
    "fieldtype": "Data",
@@ -140,11 +146,12 @@
    "read_only": 1
   },
   {
-   "fieldname": "primary_email",
-   "fieldtype": "Data",
-   "label": "Primary Email",
-   "read_only": 1
-  },
+    "fieldname": "primary_email",
+    "fieldtype": "Data",
+    "label": "Primary Email",
+    "read_only": 1,
+    "search_index": 1
+   },
   {
    "fieldname": "contact_section",
    "fieldtype": "Section Break",

@@ -34,19 +34,58 @@ class TestFMSUtils(IntegrationTestCase):
 			self.assertTrue(otp.isdigit())
 			self.assertFalse(any(c.isalpha() for c in otp))
 
+	def test_generate_otp_unique(self):
+		otps = [fms_utils.generate_otp() for _ in range(100)]
+		self.assertGreaterEqual(len(set(otps)), 95)
 
-def test_generate_otp_unique(self):
-	otps = [fms_utils.generate_otp() for _ in range(100)]
-	# Allow for small probability of collision in random generation
-	self.assertGreaterEqual(len(set(otps)), 95)
+	def test_check_otp_rate_limit_first_call(self):
+		with patch.object(frappe.cache, "get_value", return_value=None) as mock_get:
+			with patch.object(frappe.cache, "set_value") as mock_set:
+				result = fms_utils.check_otp_rate_limit("user1", "person1", "doc1")
+				self.assertTrue(result)
+				mock_get.assert_called_once()
+				mock_set.assert_called_once()
+				call_args = mock_set.call_args
+				self.assertIn(60, call_args[1].values())
+
+	def test_check_otp_rate_limit_block_repeated_call(self):
+		with patch.object(frappe.cache, "get_value", return_value="1") as mock_get:
+			result = fms_utils.check_otp_rate_limit("user1", "person1", "doc1")
+			self.assertFalse(result)
+			mock_get.assert_called_once()
 
 	def test_check_idempotency_no_key(self):
 		result = fms_utils.check_idempotency(None, "operation1")
 		self.assertTrue(result)
 
 	def test_check_idempotency_first_request(self):
-		result = fms_utils.check_idempotency("key123", "upload")
-		self.assertTrue(result)
+		with patch.object(frappe.cache, "get_value", return_value=None) as mock_get:
+			with patch.object(frappe.cache, "set_value") as mock_set:
+				result = fms_utils.check_idempotency("key123", "upload")
+				self.assertTrue(result)
+				mock_get.assert_called_once()
+				mock_set.assert_called_once()
+				call_args = mock_set.call_args
+				self.assertIn(3600, call_args[1].values())
+
+	def test_check_idempotency_blocks_duplicate(self):
+		with patch.object(frappe.cache, "get_value", return_value="1"):
+			result = fms_utils.check_idempotency("key123", "upload")
+			self.assertFalse(result)
+
+	def test_check_idempotency_different_operations(self):
+		with patch.object(frappe.cache, "get_value", return_value=None):
+			result = fms_utils.check_idempotency("key123", "upload")
+			self.assertTrue(result)
+			result = fms_utils.check_idempotency("key123", "otp")
+			self.assertTrue(result)
+
+	def test_check_idempotency_different_keys_same_operation(self):
+		with patch.object(frappe.cache, "get_value", return_value=None):
+			result = fms_utils.check_idempotency("key1", "upload")
+			self.assertTrue(result)
+			result = fms_utils.check_idempotency("key2", "upload")
+			self.assertTrue(result)
 
 	def test_sanitize_filename_alphanumeric(self):
 		result = fms_utils.sanitize_filename("file123_2024")

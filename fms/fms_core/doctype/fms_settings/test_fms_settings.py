@@ -115,7 +115,9 @@ class IntegrationTestFMSSettings(IntegrationTestCase):
 	def test_get_next_version_multiple_files(self):
 		from fms.fms_core.doctype.fms_settings.fms_settings import get_next_version
 
+		frappe.db.delete("File", {"attached_to_doctype": "FMS Person", "attached_to_name": "TEST-PER-001"})
 		frappe.db.delete("File", {"attached_to_doctype": "FMS Person"})
+
 		for i in range(1, 6):
 			frappe.get_doc(
 				{
@@ -127,6 +129,7 @@ class IntegrationTestFMSSettings(IntegrationTestCase):
 					"attached_to_name": "TEST-PER-001",
 				}
 			).insert()
+
 		version = get_next_version("TEST-PER-001", "ABC123")
 		self.assertEqual(version, 6)
 
